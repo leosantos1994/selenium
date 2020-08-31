@@ -1,0 +1,12 @@
+C:\Users\leo_l\source\repos\ConsoleApp1\bin\Release\ConsoleApp1.exe.config
+C:\Users\leo_l\source\repos\ConsoleApp1\bin\Release\ConsoleApp1.exe
+C:\Users\leo_l\source\repos\ConsoleApp1\bin\Release\ConsoleApp1.pdb
+C:\Users\leo_l\source\repos\ConsoleApp1\bin\Release\nunit.framework.dll
+C:\Users\leo_l\source\repos\ConsoleApp1\bin\Release\WebDriver.dll
+C:\Users\leo_l\source\repos\ConsoleApp1\bin\Release\nunit.framework.pdb
+C:\Users\leo_l\source\repos\ConsoleApp1\bin\Release\nunit.framework.xml
+C:\Users\leo_l\source\repos\ConsoleApp1\bin\Release\WebDriver.xml
+C:\Users\leo_l\source\repos\ConsoleApp1\obj\Release\ConsoleApp1.csprojAssemblyReference.cache
+C:\Users\leo_l\source\repos\ConsoleApp1\obj\Release\ConsoleApp1.csproj.CopyComplete
+C:\Users\leo_l\source\repos\ConsoleApp1\obj\Release\ConsoleApp1.exe
+C:\Users\leo_l\source\repos\ConsoleApp1\obj\Release\ConsoleApp1.pdb
