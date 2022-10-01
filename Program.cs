@@ -1,15 +1,16 @@
-﻿using NUnit.Framework;
+﻿using RoboVotacao.Model;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Support.UI;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections;
+using System.IO;
 
-namespace ConsoleApp1
+namespace RoboVotacao
 {
     class Program
     {
@@ -20,58 +21,137 @@ namespace ConsoleApp1
 
         public static void Main(string[] args)
         {
-            Confg = new Configuracao();
-            Apuracao = new Apuracao();
-
-            List<string> todosOsVotantes = Confg.GetUsuarios();
-
-            Inicio = DateTime.Now;
-
-            List<Thread> threadsEmExucucao = new List<Thread>();
-            for (int i = 0; i < Confg.Navegadores; i++)
+            while (true)
             {
-                List<string> votantesDoNavegador = todosOsVotantes.Splice(0, Confg.VotosPorNavegador);
-                Thread thr = new Thread(() => RegistraVoto(votantesDoNavegador));
-                threadsEmExucucao.Add(thr);
-                thr.Start();
+                try
+                {
+                    try
+                    {
+                        IniciarConfiguracoes();
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.Message);
+                        goto final;
+                    }
+                    ExecutarRobo();
+                    Apurar(false);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                    Apurar(true);
+                    break;
+                }
             }
 
-            while (threadsEmExucucao.Any(x => x.IsAlive))
-                Thread.Sleep(1000);
-            Final = DateTime.Now;
-            Apurar();
+            //mantem o prompt abero
+            final: Console.ReadLine();
         }
 
-        public static void Apurar()
+        public static void IniciarConfiguracoes()
+        {
+
+            while (!Init.Iniciou()) { Console.WriteLine("Aguardando inicio!"); };
+
+            var configInicial = Init.BuscarConfiguracaoInicial();
+
+            if (configInicial is null || !string.IsNullOrEmpty(configInicial.MensagemRetorno))
+                throw new Exception(configInicial?.MensagemRetorno ?? "Erro ao baixar as configurações iniciais do robô.");
+
+            Confg = new Configuracao(configInicial);
+            Console.WriteLine("Configurações baixadas iniciando votação!");
+
+        }
+
+        public static void ExecutarRobo()
+        {
+            try
+            {
+
+                Apuracao = new Apuracao();
+
+                Inicio = DateTime.Now;
+
+                var arr = new Dictionary<long, List<VotanteExportar>>();
+
+                int qtd = Confg.Usuarios.Count / Confg.Navegadores;
+                for (int i = 0; i < Confg.Navegadores; i++)
+                {
+                    var lista = Confg.Usuarios.Splice(0, (qtd == 0 ? Confg.Usuarios.Count : qtd));
+                    if (lista.Count > 0)
+                        arr.Add(i, lista);
+                }
+
+                Parallel.ForEach(arr, (data) =>
+                {
+                    new ExecucaoRobo(Confg, ref Apuracao).RegistraVotoCompleto(data.Value);
+                });
+
+            }
+            catch (Exception ex) { Console.WriteLine("Ocorreu uma falha no processo: " + ex.Message); }
+            finally
+            {
+                Final = DateTime.Now;
+                Console.WriteLine("Irá buscar votantes pendentes.");
+            }
+
+
+        }
+
+        public static void Apurar(bool end)
         {
             Console.WriteLine("cls");
             Console.WriteLine($"INICIO: {Inicio} - FIM: {Final}");
-            Console.WriteLine("RESULTADO DA VOTAÇÃO");
-            Console.WriteLine($"BRANCOS: {Apuracao.VotosBrancos}");
-            Console.WriteLine($"NULOS: {Apuracao.VotosNulos}");
-            foreach (var chapa in Apuracao.VotosChapas)
+            Console.WriteLine(!end ? "VOTOS COMPUTADOS ATÉ AGORA" : "RESULTADO DA VOTAÇÃO");
+            Console.WriteLine($"BRANCOS: {Apuracao?.VotosBrancos ?? 0}");
+            Console.WriteLine($"NULOS: {Apuracao?.VotosNulos ?? 0}");
+            foreach (var chapa in GetListaVotosChapa(Apuracao?.VotosChapas))
             {
                 Console.WriteLine($"CHAPA{chapa.Key}: {chapa.Value}");
             }
         }
 
-        public static void Login(IWebDriver driver, WebDriverWait await, string userID, string userPass)
+        private static Dictionary<int, int> GetListaVotosChapa(Dictionary<int, int> votos)
         {
+            if (votos is null)
+            {
+                var dic = new Dictionary<int, int>();
+                dic.Add(0, 0);
+                return dic;
+            }
+            return votos;
+        }
+
+        public static void Login(IWebDriver driver, WebDriverWait await, string userID, string userPass, int regional)
+        {
+            //Seleciona a eleição/regional
+            var select = await.Until(x => driver.FindElement(By.Id("CBEleicoes")));
+            var selectElement = new SelectElement(select);
+            selectElement.SelectByValue(regional.ToString());
             await.Until(x => driver.FindElement(By.Id("_ctl0_MainContent_BTConfirma"))).Click();
+
+            //Faz o primeiro Login
             driver.FindElement(By.Id("_ctl0_MainContent_IDRegistro")).SendKeys(userID);
             driver.FindElement(By.Id("_ctl0_MainContent_Password")).SendKeys(userPass);
             await.Until(x => driver.FindElement(By.Id("_ctl0_MainContent_bt_confirma"))).Click();
         }
 
+        public static void PerguntasVotacao(IWebDriver driver, WebDriverWait await, VotanteExportar votante)
+        {
+
+        }
 
         public static void TrocarSenha(IWebDriver driver, WebDriverWait await, string userID, string userPass)
         {
             try
             {
+                //Seta os campos da nova senha 
                 driver.FindElement(By.Id("_ctl0_MainContent_IDSenhaNova")).SendKeys(userPass);
                 driver.FindElement(By.Id("_ctl0_MainContent_IDConfirmaSenha")).SendKeys(userPass);
                 await.Until(x => driver.FindElement(By.Id("_ctl0_MainContent_bt_proximo"))).Click();
 
+                //Faz o segundo login
                 driver.FindElement(By.Id("_ctl0_MainContent_IDRegistro")).SendKeys(userID);
                 driver.FindElement(By.Id("_ctl0_MainContent_Password")).SendKeys(userPass);
                 await.Until(x => driver.FindElement(By.Id("_ctl0_MainContent_bt_confirma"))).Click();
@@ -79,36 +159,42 @@ namespace ConsoleApp1
             catch (Exception ex) { }
         }
 
-        public static void Votar(IWebDriver driver, WebDriverWait await, int voto)
+        public static void Votar(IWebDriver driver, WebDriverWait await, TipoVoto voto, int numDeChapas)
         {
             try
             {
-                await.Until(x => driver.FindElement(By.Id("votar"))).Click();
-                await.Until(x => driver.FindElement(By.Id("_ctl0_MainContent_bt_imprime"))).Click();
-                if (voto == 4)
+                //para cada votação configurada
+                //Os votos serão iguais para cada votação
+                for (int i = 0; i < Confg.NumeroDeVotacoes; i++)
                 {
-                    await.Until(x => driver.FindElement(By.Id("bt_branco"))).Click();
-                }
-                else if (voto == 5)
-                {
-                    await.Until(x => driver.FindElement(By.Id("bt_nulo"))).Click();
-                }
-                else
-                {
-                    driver.FindElement(By.Id("_ctl0_MainContent_NumVotacao")).SendKeys(voto.ToString());
-                    await.Until(x => driver.FindElement(By.Id("bt_confirma"))).Click();
+                    int votoChapa = 0;
+                    await.Until(x => driver.FindElement(By.Id("votar"))).Click();
+                    await.Until(x => driver.FindElement(By.Id("_ctl0_MainContent_bt_imprime"))).Click();
+                    if (voto == TipoVoto.Branco)
+                    {
+                        await.Until(x => driver.FindElement(By.Id("bt_branco"))).Click();
+                    }
+                    else if (voto == TipoVoto.Nulo)
+                    {
+                        await.Until(x => driver.FindElement(By.Id("bt_nulo"))).Click();
+                    }
+                    else
+                    {
+                        votoChapa = new Random().Next(1, numDeChapas);
+                        driver.FindElement(By.Id("_ctl0_MainContent_NumVotacao")).SendKeys(votoChapa.ToString());
+                        await.Until(x => driver.FindElement(By.Id("bt_confirma"))).Click();
+                    }
+                    Apuracao.SetVoto(voto, votoChapa);
+                    await.Until(x => driver.FindElement(By.Id("_ctl0_MainContent_btnConfirmar"))).Click();
                 }
 
-                Apuracao.SetVoto(voto);
-
-                await.Until(x => driver.FindElement(By.Id("_ctl0_MainContent_btnConfirmar"))).Click();
                 await.Until(x => driver.FindElement(By.Id("_ctl0_MainContent_bt_imprime"))).Click();
-                await.Until(x => driver.FindElement(By.Id("sair"))).Click();
+                await.Until(x => driver.FindElement(By.XPath("//*[normalize-space() = 'Sair']"))).Click();
             }
             catch (Exception ex) { }
         }
 
-        public static void RegistraVoto(List<string> users)
+        public static void RegistraVoto(List<VotanteExportar> users)
         {
             IWebDriver driver;
             WebDriverWait await;
@@ -117,16 +203,14 @@ namespace ConsoleApp1
             await = new WebDriverWait(driver, TimeSpan.FromSeconds(15));
             try
             {
-                string userId = "";
                 for (int i = 0; i < users.Count; i++)
                 {
-                    userId = users[i];
                     driver.Navigate().GoToUrl(Confg.URL);
-                    int voto = new Random().Next(1, 5);
 
-                    Login(driver, await, userId, Confg.SenhaPadrao);
-                    TrocarSenha(driver, await, userId, Confg.SenhaPadrao);
-                    Votar(driver, await, voto);
+                    Login(driver, await, users[i].CPF, Confg.SenhaPadrao, users[i].Regional);
+                    PerguntasVotacao(driver, await, users[i]);
+                    TrocarSenha(driver, await, users[i].CPF, Confg.SenhaTroca);
+                    Votar(driver, await, users[i].TipoVoto, Confg.NumeroDeChapas);
                 }
             }
             catch { }

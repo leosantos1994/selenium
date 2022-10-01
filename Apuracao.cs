@@ -1,6 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using RoboVotacao.Model;
+using System.Collections.Generic;
 
-namespace ConsoleApp1
+namespace RoboVotacao
 {
     public class Apuracao
     {
@@ -11,15 +12,15 @@ namespace ConsoleApp1
         public int VotosNulos { get { return interna.Nulo; } }
         public Dictionary<int, int> VotosChapas { get { return interna.ChapasVotos; } }
 
-        public void SetVoto(int voto)
+        public void SetVoto(TipoVoto voto, int votoChapa)
         {
             lock (interna)
             {
-                if (voto == 4)
+                if (voto == TipoVoto.Branco)
                     SetBranco();
-                else if (voto == 5)
+                else if (voto == TipoVoto.Nulo)
                     SetNulo();
-                else SetVotoChapa(voto);
+                else SetVotoChapa(votoChapa);
             }
         }
 
